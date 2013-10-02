@@ -217,7 +217,12 @@ pip-log.txt
 #Mr Developer
 .mr.developer.cfg
 
-# Output (Win)
-output\
-# Output (unix)
+# bin/build/dist via pyinstaller
 output/
+bin/
+build/
+dist/
+*.ico
+*.exe
+*.spec
+*.pdf

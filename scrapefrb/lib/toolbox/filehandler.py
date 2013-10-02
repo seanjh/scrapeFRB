@@ -1,26 +1,31 @@
 import os
+import sys
 import logging
-import cleanpath
 import download
 import csv
 
 
 class FileHandler():
-    def __init__(self):
+    def __init__(self, path='', dry_run=False, no_down=False):
         self.file_data = []
-        self.totalfilers = 0
-        self.workingdir = self._add_default_path()
-        self.logfilename = self._set_log_filename(self.workingdir)
+        self.total_filers = 0
+        self.dry_run = dry_run
+        self.download = (not no_down)
+        if path:
+            self.working_path = self.change_working_path(path)
+        else:
+            self.working_path = self._add_default_path()
+        self.log_filename = self._set_log_filename(self.working_path)
         self.old_data = self._read_old_file(self.output_working_dir(), self.output_filename())
         self.new_data = []
-        self.outputCSV = True
-        self.outputXML = False
+        self.output_csv = True
+        self.output_xml = False
 
     def add_file_data(self, files):
         if files:
             logging.info("Adding %d new files" % len(files))
             self.file_data += files
-            self.totalfilers += 1
+            self.total_filers += 1
         # Update old data by diffing new expanded self.file_data to existing old_data
         self.new_data = self._diff_data(self.old_data, self.file_data)
 
@@ -31,30 +36,45 @@ class FileHandler():
         return self.new_data
 
     def output_filename(self):
-        return self.logfilename
+        return self.log_filename
 
     def output_working_dir(self):
-        return self.workingdir
+        return self.working_path
+
+    def has_data(self):
+        return self.file_data
 
     def list_urls(self, datadict):
         return [row['URL'] for row in datadict]
 
-    def download_files(self, downloadall):
-        # Write new log file
-        if self.outputCSV:
-            self._output_csv(self.output_file_data(), self.output_working_dir(), self.output_filename())
-        elif self.outputXML:
-            pass
-        if downloadall:
+    def do_output(self, download_all):
+        if self.dry_run:
+            return
+        elif self.download:
+            self._download_files(download_all)
+        else:
+            self._write_log()
+
+    def _download_files(self, download_all):
+        # Write new log file (or not)
+        self._write_log()
+
+        if download_all:
             self.download_all_files()
         else:
             self.download_new_files()
 
+    def _write_log(self):
+        if self.output_csv:
+            self._output_csv(self.output_file_data(), self.output_working_dir(), self.output_filename())
+        if self.output_xml:
+            pass
+
     def download_new_files(self):
         urls = self.list_urls(self.new_data)
         if urls:
-            logging.info("Downloading new files to %s" % self.workingdir)
-            download.download_list(urls, out_path=self.workingdir)
+            logging.info("Downloading new files to %s" % self.working_path)
+            download.download_list(urls, out_path=self.working_path)
         else:
             logging.info("No new files to download!")
 
@@ -63,41 +83,44 @@ class FileHandler():
 
         if urls:
             logging.info("Downloading all files to %s" % self.output_working_dir())
-            download.download_list(urls, out_path=self.workingdir)
+            download.download_list(urls, out_path=self.working_path)
         else:
             logging.WARNING("No files scraped!")
 
-    def _output_csv(self, datalist, filepath, filename):
-        filename = os.path.join(self.workingdir, self.logfilename)
-        logging.info("Writing new logfile to %s ..." % filename),
-
-        csv_headers = self.output_file_data_headers()
-
-        with open(filename, 'wb') as csv_file:
-            dw = csv.DictWriter(csv_file, csv_headers)
-            dw.writeheader()
-            dw.writerows(self.file_data)
-        logging.info("DONE")
-
-    def change_working_path(self, path):
-        # If path is a list, make it a string
-        if cleanpath.path_is_list(path):
-            path = os.path.join(*path)
-
+    def change_working_path(self, input_path):
         # Make path absolute
-        path = os.path.abspath(path)
+        input_path = os.path.abspath(input_path)
 
-        # Update the instance workdir value
-        logging.info('Changing output directory to %s' % path)
-        self.workingdir = path
+        # Update the instance working_path value
+        logging.info('Changing output directory to %s' % input_path)
 
         # Make this new path if it does not exist already
-        cleanpath.check_path_make(path)
+        if (not os.path.exists(input_path)) & (not self.dry_run):
+            os.mkdir(input_path)
 
-        self.old_data = self._read_old_file(self.output_working_dir(), self.output_filename())
+        return input_path
 
     def output_file_data_headers(self):
         return list(self.file_data[0])
+
+    def _output_csv(self, datalist, filepath, filename):
+        working_path = os.path.join(filepath, 'log')
+
+        logging.info("Checking for the existence of %s", working_path)
+        if (not os.path.exists(working_path)) & (not self.dry_run):
+            logging.info("Creating %s", working_path)
+            os.mkdir(working_path)
+
+        full_file_path = os.path.join(filepath, 'log', filename)
+        logging.info("Writing new logfile to %s ..." % full_file_path),
+
+        csv_headers = self.output_file_data_headers()
+
+        with open(full_file_path, 'wb') as csv_file:
+            dw = csv.DictWriter(csv_file, csv_headers)
+            dw.writeheader()
+            dw.writerows(datalist)
+        logging.info("DONE")
 
     def _compare_old_to_new(self):
         # Read existing logfile. Empty list is returned if there is no previous log.
@@ -111,10 +134,10 @@ class FileHandler():
         olddata = []
 
         # Open existing log file
-        logfile = os.path.join(path, filename)
+        logfile = os.path.join(path, 'log', filename)
 
         # Read in the existing CSV, if it exists
-        if cleanpath.path_exists(logfile):
+        if os.path.exists(logfile):
             logging.info("Opening existing log file at %s" % logfile)
             with open(logfile, 'r') as infile:
                 dictreader = csv.DictReader(infile)
@@ -131,23 +154,27 @@ class FileHandler():
         return diff
 
     def _add_default_path(self):
-        # Path for filehandler.py
-        thisfilepath = str(os.path.realpath(__file__))
+        # determine if application is a script file or frozen exe
+        if getattr(sys, 'frozen', False):
+            workingpath = os.path.dirname(sys.executable)
+        else:
+            workingpath = os.path.dirname(__file__)
+            workingpath = self._prep_script_path(workingpath)
 
-        # Convert path to a list
-        workingpath = cleanpath.path_to_list(thisfilepath)
+        # Locate output to the output/ directory
+        workingpath = os.path.join(workingpath, 'output')
 
-        # Drop down 3 relative levels (file + 2 directories)
-        workingpath.pop()
-        workingpath.pop()
-        workingpath.pop()
-
-        # Locate output to ../../output
-        workingpath.append('output')
+        logging.info("Checking for the existence of %s", workingpath)
 
         # Check if the directory exists. If not, create it.
-        cleanpath.check_path_make(workingpath)
-        return os.path.join(*workingpath)
+        if (not os.path.exists(workingpath)) & (not self.dry_run):
+            logging.info("Creating %s", workingpath)
+            os.mkdir(workingpath)
+        return workingpath
+
+    def _prep_script_path(self, pathstr):
+        # Drop down 2 directories
+        return os.path.abspath(os.path.join(pathstr, '..', '..'))
 
     def _set_log_filename(self, path):
         file = 'ScrapeFRB_log.csv'

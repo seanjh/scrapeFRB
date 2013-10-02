@@ -1,7 +1,7 @@
 ## Introduction
 **Author:** Sean J. Herman
 
-The ScrapeFRB application serves as a specialized web scraper of FR-Y6 files from the Chicago and Atlanta
+The ScrapeFRB application serves as a specialized web scraper of FRY-6 files from the Chicago and Atlanta
 Federal Reserve Bank (FRB) web sites.
 
 ## Prerequisites

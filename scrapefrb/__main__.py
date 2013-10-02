@@ -3,26 +3,28 @@
     This scraper will find and download all FR-Y6 filings from these supported FRB sites.
 
 Usage:
-    scrapefrb.py [-qd]
-    scrapefrb.py [-qa]
-    scrapefrb.py [-qa --outpath=<path>]
-    scrapefrb.py [-qd --outpath=<path>]
-    scrapefrb.py --outpath=<path>
+    scrapefrb.py [-qdlcn]
+    scrapefrb.py [-qalcn]
+    scrapefrb.py [-qalcn --workpath=<path>]
+    scrapefrb.py [-qdlcn --workpath=<path>]
+    scrapefrb.py --workpath=<path>
     scrapefrb.py -h | --help
     scrapefrb.py --version
 
 Options:
-    -h --help       Show this help screen
-    --version       Show version
-    --outpath=<path> Customize the working directory (for new & existing downloads and log files)
-    -q --quiet      Quiet mode (i.e., No console output).
-    -d --dryrun     Dry run. Do not download any files or write logfile.
-    -a --alldown    Download all files and overwrite existing copies
-
+    -h --help           Show this help screen
+    --version           Show version
+    --workpath=<path>   Customize the working directory (for new & existing downloads and log files)
+    -q --quiet          Quiet mode (i.e., No console output).
+    -d --dryrun         Execute a dry run. Do not download any files or write logfile.
+    -a --alldown        Download all files and overwrite existing copies
+    -n --nodown         Do not download files. A logfile will still be written.
+    -c                  Include Chicago FRB.
+    -l                  Include Atlanta FRB.
 """
 
 __author__ = 'Sean J. Herman'
-__version__ = '0.1'
+__version__ = '0.2.16'
 
 import docopt
 import logging
@@ -40,17 +42,29 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.INFO)
         logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
-    # Create the AFRB scraper
-    afrb = afrbfiler.Filer()
+    if args['--dryrun']:
+        logging.info("Doing a dry run.")
 
-    # Create the CFRB scraper
-    cfrb = cfrbfiler.Filer()
+    if args['--nodown']:
+        logging.info("Skipping downloads.")
 
-    filings = filehandler.FileHandler()
-    if args['--outpath']:
-        filings.change_working_path(args['--outpath'])
-    filings.add_file_data(afrb.output_files())
-    filings.add_file_data(cfrb.output_files())
+    filings = filehandler.FileHandler(args['--workpath'], args['--dryrun'], args['--nodown'])
 
-    if not args['--dryrun']:
-        filings.download_files(args['--alldown'])
+    if args['-l'] & args['-c']:
+        scrape_all = True
+    elif (not args['-l']) & (not args['-c']):
+        scrape_all = True
+    else:
+        scrape_all = False
+
+    if args['-l'] | scrape_all:
+        # Create the AFRB scraper
+        afrb = afrbfiler.Filer()
+        filings.add_file_data(afrb.output_files())
+
+    if args['-c'] | scrape_all:
+        # Create the CFRB scraper
+        cfrb = cfrbfiler.Filer()
+        filings.add_file_data(cfrb.output_files())
+
+    filings.do_output(args['--alldown'])
