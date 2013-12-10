@@ -217,12 +217,16 @@ pip-log.txt
 #Mr Developer
 .mr.developer.cfg
 
-# bin/build/dist via pyinstaller
+# project specific
 output/
 bin/
 build/
 dist/
+download/
 *.ico
 *.exe
 *.spec
 *.pdf
+*.db
+*.db-journal
+*.log

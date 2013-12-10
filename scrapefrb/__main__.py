@@ -1,70 +1,84 @@
-"""    ScapeFRB is a FR-Y6 Federal Reserve Bank file scraper.
-    Currently, only the Chicago FR (chicagofed.org) and Atlanta FRB (frbatlanta.org) are supported.
-    This scraper will find and download all FR-Y6 filings from these supported FRB sites.
+"""ScapeFRB is a web scraper that crawls and collects FR Y-6 documents from
+    several US Federal Reserve Bank branch websites. Currently supported:
+        * Chicago (https://www.chicagofed.org/webpages/banking/financial_institution_reports/annual_report_of_bank_holding_companies.cfm) 
+        * Atlanta (http://www.frbatlanta.org/banking/reporting/fry6/)
+        * St. Louis (http://www.stlouisfed.org/bsr/y6/)
 
 Usage:
-    scrapefrb.py [-qdlcn]
-    scrapefrb.py [-qalcn]
-    scrapefrb.py [-qalcn --workpath=<path>]
-    scrapefrb.py [-qdlcn --workpath=<path>]
-    scrapefrb.py --workpath=<path>
-    scrapefrb.py -h | --help
-    scrapefrb.py --version
+    scrapefrb [-a]
+    scrapefrb [-a --workpath=<path>]
+    scrapefrb --workpath=<path>
+    scrapefrb -h | --help
+    scrapefrb --version
 
 Options:
-    -h --help           Show this help screen
-    --version           Show version
-    --workpath=<path>   Customize the working directory (for new & existing downloads and log files)
-    -q --quiet          Quiet mode (i.e., No console output).
-    -d --dryrun         Execute a dry run. Do not download any files or write logfile.
-    -a --alldown        Download all files and overwrite existing copies
-    -n --nodown         Do not download files. A logfile will still be written.
-    -c                  Include Chicago FRB.
-    -l                  Include Atlanta FRB.
+    -h --help           Show this help screen.
+    --version           Show version.
+    --workpath=<path>   Customize the working/output directory.
+    -a --alldown        Download all files. By default, only new files are downloaded.
 """
 
 __author__ = 'Sean J. Herman'
-__version__ = '0.2.16'
+__version__ = '0.5.0'
 
 import docopt
-import logging
-from lib.afrb import afrbfiler
-from lib.cfrb import cfrbfiler
-from lib.toolbox import filehandler
+import os
+import sys
+from src import frblogger
+from src.bankhandler import FRB
+from src.stlfrb import StLouis
+from src.cfrb import Chicago
+from src.afrb import Atlanta
 
-if __name__ == '__main__':
+OUTPUT_DIRECTORIES = ['', 'downloads']
+
+def main():
     args = docopt.docopt(__doc__, version=__version__)
 
-    # print args
-    if args['--quiet']:
-        logging.basicConfig(level=logging.CRITICAL)
+    if args['--alldown']:
+        FRB.set_download_all()
+
+    if args['--workpath']:
+        working_path = args['--workpath']
     else:
-        logging.basicConfig(level=logging.INFO)
-        logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+        working_path = get_default_path()
 
-    if args['--dryrun']:
-        logging.info("Doing a dry run.")
+    try:
+        logger = frblogger.configure_logger('root', working_path)
+    except IOError as e:
+        print(e)
+        sys.exit(0)
 
-    if args['--nodown']:
-        logging.info("Skipping downloads.")
+    for directory in OUTPUT_DIRECTORIES:
+        this_path = os.path.join(working_path, directory)
+        this_path = os.path.abspath(this_path)
+        if not(os.path.exists(this_path)):
+            logger.info('Making %s' % this_path)
+            os.mkdir(this_path)
 
-    filings = filehandler.FileHandler(args['--workpath'], args['--dryrun'], args['--nodown'])
+    if not(os.path.exists(working_path)):
+        os.mkdir(working_path)
 
-    if args['-l'] & args['-c']:
-        scrape_all = True
-    elif (not args['-l']) & (not args['-c']):
-        scrape_all = True
+    FRB.set_working_path(working_path)
+
+    f = StLouis()
+    f.insert()
+    f.download()
+    f = Chicago()
+    f.insert()
+    f.download()
+    f = Atlanta()
+    f.insert()
+    f.download()
+
+def get_default_path():
+    if getattr(sys, 'frozen', False):
+        working_path = os.path.dirname(sys.executable)
     else:
-        scrape_all = False
+        working_path = os.path.dirname(__file__)
+        working_path = os.path.abspath(os.path.join(working_path, '..'))
 
-    if args['-l'] | scrape_all:
-        # Create the AFRB scraper
-        afrb = afrbfiler.Filer()
-        filings.add_file_data(afrb.output_files())
+    return working_path
 
-    if args['-c'] | scrape_all:
-        # Create the CFRB scraper
-        cfrb = cfrbfiler.Filer()
-        filings.add_file_data(cfrb.output_files())
-
-    filings.do_output(args['--alldown'])
+if __name__ == '__main__':
+    main()
