@@ -119,23 +119,22 @@ class FRBDownload(object):
 
     @classmethod
     def download(cls, urls):
-        existing_files = os.listdir(FRBDownload.PATH_NAME)
+        s = requests.Session()
 
-        total_files = len(urls)
-        FRBDownload.LOGGER.info('Checking %d total files.' % total_files)
+        new_files = FRBDownload.compare_local(urls)
+        total_files = len(new_files)
 
-        for i, url in enumerate(urls):
-            # Request the headers
-            r = requests.get(url, stream=True)
+        for i, doc in enumerate(new_files):
+            url = doc.get('URL')
+            file_name = doc.get('File Name')
+
+            req = requests.Request('GET', url)
+            prepped = req.prepare()
+            r = s.send(prepped, stream=True)
             if not(r.ok):
                 FRBDownload.LOGGER.warning('ERROR (%s) retreiving %s' 
                     % (r.status_code, r.url))
-                break
-
-            # Construct the filename if the URL doesn't provide something workable
-            file_name = url.split('/')[-1]
-            if 'aspx' in file_name.lower():
-                file_name = FRBDownload.make_filename(r.headers)
+                return
 
             file_name_abs = os.path.join(FRBDownload.PATH_NAME, file_name)
 
@@ -144,25 +143,40 @@ class FRBDownload(object):
             except ValueError:
                 remote_size = -1
 
-            # If the file exists already, get its size
-            local_size = 0
+            # Download the file
+            with open(file_name_abs, 'wb') as outfile:
+                local_size = 0
+                for chunk in r.iter_content(chunk_size=FRBDownload.CHUNK_SIZE):
+                    local_size += len(chunk)
+                    sys.stdout.write('\rDownloading file #%d/%d. Completed: %d%%' % 
+                        (i + 1, total_files, 100.0 * local_size / remote_size))
+                    sys.stdout.flush()
+                    outfile.write(chunk)
+                sys.stdout.write('\n')
+            FRBDownload.LOGGER.info('Finished Downloading %s (%d)'
+                % (file_name, remote_size))
 
-            # Download if the file does not exist, or is smaller than the remote
-            if file_name not in existing_files:
-                with open(file_name_abs, 'wb') as outfile:
-                    local_size = 0
-                    for chunk in r.iter_content(chunk_size=FRBDownload.CHUNK_SIZE):
-                        local_size += len(chunk)
-                        sys.stdout.write('\rDownloading file #%d/%d. Completed: %d%%' % 
-                            (i + 1, total_files, 100.0 * local_size / remote_size))
-                        sys.stdout.flush()
-                        outfile.write(chunk)
-                    sys.stdout.write('\n')
-                FRBDownload.LOGGER.info('Finished Downloading %s (%d)' 
-                    % (file_name, remote_size))
-            #else:
-                #FRBDownload.LOGGER.info('%s exists already (%dB). Skipping download.' % 
-                    #(file_name, local_size))
+    @classmethod
+    def compare_local(cls, urls):
+        FRBDownload.LOGGER.info("Comparing remote URLs to local files in %s" % 
+            FRBDownload.PATH_NAME)
+
+        existing_files = os.listdir(FRBDownload.PATH_NAME)
+        files = []
+
+        for url in urls:
+            one_file = {}
+            one_file['URL'] = url
+            file_name = url.split('/')[-1]
+            if 'aspx' in file_name.lower():
+                url_query = urlparse(url)[4] # query component
+                file_name = url_query.split('=')[1] # just the query value
+                file_name += '_stlfrb.pdf'
+            one_file['File Name'] = file_name
+            files.append(one_file)
+
+        return [doc for doc in files if doc['File Name'] not in existing_files]
+
 
     @classmethod
     def set_working_path(cls, path):
