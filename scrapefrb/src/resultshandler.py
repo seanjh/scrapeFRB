@@ -132,7 +132,7 @@ class FRBDownload(object):
                     % (r.status_code, r.url))
                 break
 
-            # Build the filename
+            # Construct the filename if the URL doesn't provide something workable
             file_name = url.split('/')[-1]
             if 'aspx' in file_name.lower():
                 file_name = FRBDownload.make_filename(r.headers)

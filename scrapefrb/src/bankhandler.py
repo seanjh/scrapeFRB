@@ -105,11 +105,4 @@ class FRB(object):
             downloads = self.new_documents
 
         url_key = self.key_map['URL']
-
-        to_down = []
-        
-        for i in range(5):
-            to_down.append(downloads[i][url_key])
-
-        #FRBDownload.download([doc[url_key] for doc in downloads])
-        FRBDownload.download(to_down)
+        FRBDownload.download([doc[url_key] for doc in downloads])
