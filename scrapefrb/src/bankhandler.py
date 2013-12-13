@@ -36,8 +36,9 @@ class FRB(object):
         self.logger = logging.getLogger('root')
 
         self.scrape()
-        self._normalize()
-        self.compare()
+        if self.documents:
+            self._normalize()
+            self.compare()
         #self.insert()
         #self.download()
 
@@ -51,7 +52,7 @@ class FRB(object):
         if old_pairs:
             self.logger.info('Fetched %d old documents' % len(old_pairs))
             for d in self.documents:
-                new_pair = (d[self.key_map['RSSD']], d[self.key_map['Name']], d[self.key_map['Year']])
+                new_pair = (d[self.key_map.get('RSSD')], d[self.key_map.get('Name')], d[self.key_map.get('Year')])
                 if new_pair not in old_pairs:
                     self.new_documents.append(d)
             self.logger.info('Located %d total new documents for insert' % len(self.new_documents))
@@ -74,10 +75,10 @@ class FRB(object):
                         break
 
     def _normalize_dates(self):
-        date_key = self.key_map['Date']
+        date_key = self.key_map.get('Date')
         for doc in self.documents:
             # Convert date string to datetime object
-            doc[date_key] = datetime.strptime(doc[date_key], self.DATE_FORMAT)
+            doc[date_key] = datetime.strptime(doc.get(date_key), self.DATE_FORMAT)
 
     def insert(self):
         self.logger.info('Inserting %d records' % len(self.new_documents))
@@ -104,5 +105,5 @@ class FRB(object):
         else:
             downloads = self.new_documents
 
-        url_key = self.key_map['URL']
+        url_key = self.key_map.get('URL')
         FRBDownload.download([doc[url_key] for doc in downloads])

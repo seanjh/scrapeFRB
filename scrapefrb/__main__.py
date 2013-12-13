@@ -61,15 +61,14 @@ def main():
 
     FRB.set_working_path(working_path)
 
-    f = StLouis()
-    f.insert()
-    f.download()
-    f = Chicago()
-    f.insert()
-    f.download()
-    f = Atlanta()
-    f.insert()
-    f.download()
+    frbs = [StLouis(), Chicago(), Atlanta()]
+    
+    for f in frbs:
+        if f.documents:
+            f.insert()
+            f.download()
+        else:
+            logger.warning("No documents found at %s" % f.URL)
 
 def get_default_path():
     if getattr(sys, 'frozen', False):
